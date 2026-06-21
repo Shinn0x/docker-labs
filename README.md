@@ -59,6 +59,3 @@ git switch L01   # see the solution for project 01
   discovery by name, database-per-service.
 
 > Prerequisites: Docker Engine + Docker Compose v2.
-
-When you've built them, see [LINKEDIN.md](./LINKEDIN.md) for post drafts to
-showcase the work.
