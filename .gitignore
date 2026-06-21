@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Java / Maven
+target/
+*.class
+
+# Frontend build output
+dist/
+
+# Secrets / env
+.env
+*.local
+
+# Editors / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+__MACOSX/

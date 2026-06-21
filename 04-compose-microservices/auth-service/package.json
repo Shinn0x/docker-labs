@@ -1,0 +1,14 @@
+{
+  "name": "auth-service",
+  "version": "1.0.0",
+  "description": "Issues and verifies session tokens. Backed by Redis.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": { "start": "node src/server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "redis": "^4.7.0"
+  },
+  "license": "MIT"
+}

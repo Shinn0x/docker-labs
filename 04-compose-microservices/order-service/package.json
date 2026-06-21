@@ -1,0 +1,14 @@
+{
+  "name": "order-service",
+  "version": "1.0.0",
+  "description": "Creates orders. Validates the caller via auth-service and the product via catalog-service. Stores orders in Postgres.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": { "start": "node src/server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  },
+  "license": "MIT"
+}
