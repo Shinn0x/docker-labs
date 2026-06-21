@@ -24,6 +24,27 @@ service dependencies, and a **🎯 Your Docker task** checklist with a
 01 → 04 (difficulty increases). Do the two Dockerfile projects first, then the
 two Compose projects.
 
+## Solutions
+
+`main` holds the starter repo with no Docker artifacts — that's the exercise.
+Each project's worked solution lives on its own branch, named `L<NN>` to match
+the project number:
+
+| Project | Solution branch |
+|---------|-----------------|
+| [01](./01-dockerfile-node-monolith) | `L01` |
+| [02](./02-dockerfile-java-springboot) | `L02` |
+| [03](./03-compose-fullstack) | `L03` |
+| [04](./04-compose-microservices) | `L04` |
+
+A solution branch adds the Docker artifacts for that project (`Dockerfile`,
+`.dockerignore`, and a `docker-compose.yml` where applicable) plus any
+README notes. Try a project yourself on `main` first, then check the branch.
+
+```bash
+git switch L01   # see the solution for project 01
+```
+
 ## Concepts you'll practice across the suite
 
 - **Multi-stage builds** — keep build tooling out of the shipped image (most
