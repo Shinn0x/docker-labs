@@ -1,61 +1,87 @@
-# 🐳 Docker Practice Projects — Dockerfile → Docker Compose → Microservices
+# 01 · Task Manager API — Dockerfile practice (Node.js monolith)
 
-Four hands-on projects to practice **writing Dockerfiles and Docker Compose
-files yourself**. The application code is provided and working — your job in
-each project is to write the Docker artifacts (`Dockerfile`, `.dockerignore`,
-`docker-compose.yml`) that build, run, and orchestrate it.
+## 📖 What this project is about
 
-They progress from packaging a single app to orchestrating a multi-language
-microservices system.
+A small Express REST API for managing tasks. It's a self-contained "monolith":
+the HTTP layer, an in-memory data store, and the business logic all live in one
+Node process — exactly the kind of app a single **Dockerfile** is meant to
+package.
 
-| # | Project | You write | Stack | Skills practiced |
-|---|---------|-----------|-------|------------------|
-| [01](./01-dockerfile-node-monolith) | Task Manager API | `Dockerfile`, `.dockerignore` | Node.js + Express | Multi-stage build, layer caching, slim non-root image, HEALTHCHECK |
-| [02](./02-dockerfile-java-springboot) | Quotes Service | `Dockerfile`, `.dockerignore` | Java + Spring Boot | Maven multi-stage, JDK→JRE size cut (~75%), layered jars |
-| [03](./03-compose-fullstack) | Full-stack Notes | 2× `Dockerfile` + `docker-compose.yml` | React/nginx + Node + Postgres + Redis | Multi-container, service DNS, healthcheck-gated startup, named volumes |
-| [04](./04-compose-microservices) | E-commerce Microservices | 4× `Dockerfile` + `docker-compose.yml` | nginx + Node + Java + Postgres + Redis | API gateway, polyglot services, service-to-service calls, DB-per-service |
+The application code is finished and working. **Your job is to write the
+`Dockerfile` (and a `.dockerignore`)** that containerizes it the way you'd ship
+it to production.
 
-Each project's README contains: what it is, how it runs, ports, env vars,
-service dependencies, and a **🎯 Your Docker task** checklist with a
-"check yourself" section to verify your work.
+- **Stack:** Node.js 20 + Express
+- **Data:** none — tasks live in memory and reset on restart
+- **Listens on:** `PORT` (default `3000`)
 
-## Suggested order
-
-01 → 04 (difficulty increases). Do the two Dockerfile projects first, then the
-two Compose projects.
-
-## Solutions
-
-`main` holds the starter repo with no Docker artifacts — that's the exercise.
-Each project's worked solution lives on its own branch, named `L<NN>` to match
-the project number:
-
-| Project | Solution branch |
-|---------|-----------------|
-| [01](./01-dockerfile-node-monolith) | `L01` |
-| [02](./02-dockerfile-java-springboot) | `L02` |
-| [03](./03-compose-fullstack) | `L03` |
-| [04](./04-compose-microservices) | `L04` |
-
-A solution branch adds the Docker artifacts for that project (`Dockerfile`,
-`.dockerignore`, and a `docker-compose.yml` where applicable) plus any
-README notes. Try a project yourself on `main` first, then check the branch.
+## ▶️ How it runs (without Docker)
 
 ```bash
-git switch L01   # see the solution for project 01
+npm install
+npm start          # listens on PORT (default 3000)
+
+curl localhost:3000/health
+curl localhost:3000/api/tasks
 ```
 
-## Concepts you'll practice across the suite
+## 🛠️ Try it yourself
 
-- **Multi-stage builds** — keep build tooling out of the shipped image (most
-  dramatic in the Java project).
-- **Small, secure images** — alpine bases, prod-only deps, non-root users.
-- **Build cache discipline** — copy dependency manifests before source.
-- **`.dockerignore`** — smaller, faster build contexts.
-- **Healthchecks** — both `HEALTHCHECK` in Dockerfiles and Compose `healthcheck`.
-- **Compose orchestration** — networks, named volumes, env/`.env` config,
-  `depends_on` conditions, reverse proxy, and an API gateway.
-- **Microservices fundamentals** — independent polyglot services, service
-  discovery by name, database-per-service.
+**First, review the code** so you know exactly what you're packaging:
 
-> Prerequisites: Docker Engine + Docker Compose v2.
+| Read this file | What it tells you for the Dockerfile |
+|----------------|--------------------------------------|
+| `package.json` | start command (`npm start` → `node src/server.js`), Node engine (`>=20`), the single prod dependency (`express`) |
+| `src/server.js` | reads `PORT` (default `3000`), handles `SIGTERM` for clean `docker stop` |
+| `src/app.js` | the routes — confirms `GET /health` returns `200` |
+| `src/healthcheck.js` | a zero-dependency probe you can call from `HEALTHCHECK` (`node src/healthcheck.js` exits `0` when healthy — no curl/wget needed) |
+
+**Then write a `Dockerfile` + `.dockerignore`** aiming for a production-quality
+image:
+
+- [ ] **Multi-stage build** — install dependencies in one stage, copy into a clean runtime stage
+- [ ] Use a **slim base image** (e.g. `node:20-alpine`) instead of the full image
+- [ ] **Order layers for caching** — copy `package*.json` and install deps *before* copying source, so code changes don't reinstall everything
+- [ ] Install **production deps only** (`npm ci --omit=dev`)
+- [ ] **Run as a non-root user** (the `node` user already exists in the official image)
+- [ ] Add a **`HEALTHCHECK`** (use `src/healthcheck.js`)
+- [ ] `EXPOSE` the port and set the start `CMD`
+- [ ] Write a **`.dockerignore`** (exclude `node_modules`, `.git`, `*.md`, etc.)
+
+**Check yourself:**
+
+```bash
+docker build -t task-manager-api .
+docker run --rm -p 3000:3000 task-manager-api
+docker run --rm task-manager-api whoami    # should print "node", not "root"
+docker images task-manager-api             # how small did you get it?
+docker ps                                  # HEALTHCHECK should flip to "healthy"
+```
+
+## 📚 Stuck? Read the docs
+
+- [Dockerfile reference](https://docs.docker.com/reference/dockerfile/)
+- [Multi-stage builds](https://docs.docker.com/build/building/multi-stage/)
+- [Build cache & layer ordering](https://docs.docker.com/build/cache/)
+- [`HEALTHCHECK` instruction](https://docs.docker.com/reference/dockerfile/#healthcheck)
+- [`.dockerignore` files](https://docs.docker.com/build/concepts/context/#dockerignore-files)
+- [Node.js official image — best practices](https://github.com/nodejs/docker-node/blob/main/README.md#best-practices)
+
+## 🎁 What you'll get from this project
+
+- Confidence writing a **multi-stage Dockerfile** from scratch.
+- An intuition for **layer caching** — why dependency manifests get copied before source.
+- Habits that make images **small and secure**: alpine base, prod-only deps, non-root user.
+- A reusable **`HEALTHCHECK`** pattern that needs no extra packages in the runtime image.
+- The headline talking point: *"I shipped a slim, non-root, health-checked Node image."*
+
+## API reference
+
+| Method | Path             | Description      |
+|--------|------------------|------------------|
+| GET    | `/health`        | Liveness probe   |
+| GET    | `/`              | Service metadata |
+| GET    | `/api/tasks`     | List tasks       |
+| POST   | `/api/tasks`     | Create a task    |
+| PATCH  | `/api/tasks/:id` | Update a task    |
+| DELETE | `/api/tasks/:id` | Delete a task    |
