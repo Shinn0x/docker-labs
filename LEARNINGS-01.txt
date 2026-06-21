@@ -1,0 +1,94 @@
+==============================================================
+ PROJECT 01 - Task Manager API (Node monolith)
+ What I learned building the Dockerfile
+==============================================================
+
+1. MULTI-STAGE BUILDS  (new to me!)
+--------------------------------------------------------------
+- A single Dockerfile can have many stages. Every "FROM" starts a
+  new stage. Name one with "AS <name>".
+- A later stage pulls files from an earlier one with:
+      COPY --from=<name> <src> <dest>
+- ONLY THE LAST STAGE BECOMES THE IMAGE. Everything in earlier
+  stages is thrown away unless I explicitly COPY --from it forward.
+- My setup: stage "builder" runs npm install; runtime stage copies
+  just node_modules out of it. Build junk/caches stay behind.
+
+  WHY it matters / benefits:
+    * smaller image  -> only the artifact ships, not build tools
+    * more secure    -> fewer packages = smaller attack surface
+    * faster deploy  -> smaller images push/pull faster
+    * no leftovers   -> source, .git, build secrets stay in the
+                        discarded stage
+
+  Reality check for NODE:
+    Multi-stage barely shrank my image (50.8MB -> ~49MB). That's
+    EXPECTED. Node uses the same runtime to build and run, and
+    node_modules MUST stay at runtime - there's no heavy compiler
+    to throw away. 
+
+2. HEALTHCHECK  (hands-on)
+--------------------------------------------------------------
+- HEALTHCHECK tells Docker how to know the container is actually
+  working, not just "running". Status shows in `docker ps`
+  (starting -> healthy / unhealthy).
+- I used a tiny zero-dependency Node probe (src/healthcheck.js)
+  instead of curl/wget, so the slim image needs no extra packages.
+  It hits /health and exits 0 (ok) or 1 (bad).
+- Flags I used and why:
+      --interval        how often to run the check
+      --timeout         fail the check if it hangs this long
+      --start-period    grace window during boot (no fails counted)
+      --start-interval  check more often while still starting up
+      CMD <command>     the actual probe
+
+3. LAYER CACHING  (copy manifest before source)
+--------------------------------------------------------------
+- Docker caches each instruction as a layer. If nothing above
+  changed, it reuses the cache.
+- That's why I COPY package.json and run npm install BEFORE
+  copying the source. Editing app code doesn't bust the
+  dependency layer -> rebuilds are fast.
+
+4. .dockerignore
+--------------------------------------------------------------
+- Keeps files OUT of the build context (what gets sent to the
+  daemon and is available to COPY).
+- Should exclude: node_modules/, .git/, *.md, .env, etc.
+- Gotcha I learned: with "COPY . ." a host-built node_modules can
+  get copied INTO the image over the clean one - the exact thing
+  multi-stage is trying to avoid. .dockerignore prevents that.
+
+5. PROD-ONLY DEPENDENCIES
+--------------------------------------------------------------
+- package.json splits "dependencies" (needed to RUN) from
+  "devDependencies" (only for dev/test/lint).
+- "npm install --omit=dev" installs runtime deps only -> smaller,
+  safer image. (--production / --only=prod are the old names.)
+
+6. SMALL & SECURE IMAGE HABITS
+--------------------------------------------------------------
+- Use a slim base: node:alpine instead of the full node image.
+- Run as a NON-ROOT user (USER node) - smaller blast radius if the
+  app is compromised.
+- The base image + node_modules dominate the size, not my code.
+
+7. READING IMAGE SIZES
+--------------------------------------------------------------
+- CONTENT SIZE = the image's own (deduplicated) layer content -
+  the "true" size.
+- DISK USAGE   = content + shared base layers counted in. Images
+  that share node:alpine share that base layer on disk (counted
+  once), so real extra cost << the number shown.
+- EXTRA        = data not tied to a tagged image (dangling/loose).
+
+--------------------------------------------------------------
+HANDY COMMANDS I USED
+--------------------------------------------------------------
+  docker build -t lab01:latest .
+  docker run --rm -p 3000:3000 lab01:latest
+  docker run --rm lab01:latest whoami     # should say "node"
+  docker images                            # compare sizes
+  docker ps                                # watch HEALTHCHECK go healthy
+
+--------------------------------------------------------------
