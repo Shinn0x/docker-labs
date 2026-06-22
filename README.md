@@ -1,61 +1,86 @@
-# 🐳 Docker Practice Projects — Dockerfile → Docker Compose → Microservices
+# 02 · Quotes Service — Dockerfile practice (Java / Spring Boot)
 
-Four hands-on projects to practice **writing Dockerfiles and Docker Compose
-files yourself**. The application code is provided and working — your job in
-each project is to write the Docker artifacts (`Dockerfile`, `.dockerignore`,
-`docker-compose.yml`) that build, run, and orchestrate it.
+## 📖 What this project is about
 
-They progress from packaging a single app to orchestrating a multi-language
-microservices system.
+A Spring Boot REST service that serves inspirational quotes. This is the
+project where **multi-stage Dockerfiles really pay off**: compiling Java needs
+a full JDK + Maven, but *running* it only needs a JRE — so the build toolchain
+should never ship in your final image.
 
-| # | Project | You write | Stack | Skills practiced |
-|---|---------|-----------|-------|------------------|
-| [01](./01-dockerfile-node-monolith) | Task Manager API | `Dockerfile`, `.dockerignore` | Node.js + Express | Multi-stage build, layer caching, slim non-root image, HEALTHCHECK |
-| [02](./02-dockerfile-java-springboot) | Quotes Service | `Dockerfile`, `.dockerignore` | Java + Spring Boot | Maven multi-stage, JDK→JRE size cut (~75%), layered jars |
-| [03](./03-compose-fullstack) | Full-stack Notes | 2× `Dockerfile` + `docker-compose.yml` | React/nginx + Node + Postgres + Redis | Multi-container, service DNS, healthcheck-gated startup, named volumes |
-| [04](./04-compose-microservices) | E-commerce Microservices | 4× `Dockerfile` + `docker-compose.yml` | nginx + Node + Java + Postgres + Redis | API gateway, polyglot services, service-to-service calls, DB-per-service |
+The application code is finished and working. **Your job is to write the
+`Dockerfile` (and `.dockerignore`)** that builds and runs it as a small, secure
+image.
 
-Each project's README contains: what it is, how it runs, ports, env vars,
-service dependencies, and a **🎯 Your Docker task** checklist with a
-"check yourself" section to verify your work.
+- **Stack:** Java 21 + Spring Boot 3.3 (Maven)
+- **Health:** Spring Boot Actuator exposes `/actuator/health`
+- **Data:** none
+- **Listens on:** `8080`
 
-## Suggested order
-
-01 → 04 (difficulty increases). Do the two Dockerfile projects first, then the
-two Compose projects.
-
-## Solutions
-
-`main` holds the starter repo with no Docker artifacts — that's the exercise.
-Each project's worked solution lives on its own branch, named `L<NN>` to match
-the project number:
-
-| Project | Solution branch |
-|---------|-----------------|
-| [01](./01-dockerfile-node-monolith) | `L01` |
-| [02](./02-dockerfile-java-springboot) | `L02` |
-| [03](./03-compose-fullstack) | `L03` |
-| [04](./04-compose-microservices) | `L04` |
-
-A solution branch adds the Docker artifacts for that project (`Dockerfile`,
-`.dockerignore`, and a `docker-compose.yml` where applicable) plus any
-README notes. Try a project yourself on `main` first, then check the branch.
+## ▶️ How it runs (without Docker)
 
 ```bash
-git switch L01   # see the solution for project 01
+# Needs JDK 21 + Maven locally:
+mvn spring-boot:run
+# or
+mvn clean package -DskipTests && java -jar target/quotes-service-1.0.0.jar
+
+curl localhost:8080/api/quotes
+curl localhost:8080/actuator/health
 ```
 
-## Concepts you'll practice across the suite
+## 🛠️ Try it yourself
 
-- **Multi-stage builds** — keep build tooling out of the shipped image (most
-  dramatic in the Java project).
-- **Small, secure images** — alpine bases, prod-only deps, non-root users.
-- **Build cache discipline** — copy dependency manifests before source.
-- **`.dockerignore`** — smaller, faster build contexts.
-- **Healthchecks** — both `HEALTHCHECK` in Dockerfiles and Compose `healthcheck`.
-- **Compose orchestration** — networks, named volumes, env/`.env` config,
-  `depends_on` conditions, reverse proxy, and an API gateway.
-- **Microservices fundamentals** — independent polyglot services, service
-  discovery by name, database-per-service.
+**First, review the code** so you know what the build needs and what the
+runtime needs:
 
-> Prerequisites: Docker Engine + Docker Compose v2.
+| Read this file | What it tells you for the Dockerfile |
+|----------------|--------------------------------------|
+| `pom.xml` | Java 21, Spring Boot 3.3.4, artifact `quotes-service-1.0.0.jar`, and the `spring-boot-maven-plugin` that produces a **layered jar** |
+| `application.properties` | `server.port=8080`, and that only `/actuator/health` is exposed |
+| `QuoteController.java` | the routes the running jar serves (no DB, nothing external to wire up) |
+
+**Then write a `Dockerfile` + `.dockerignore`:**
+
+- [ ] **Multi-stage build**: a *build* stage on a Maven+JDK image (e.g. `maven:3.9-eclipse-temurin-21`) that compiles the jar, and a *runtime* stage on a JRE-only image (e.g. `eclipse-temurin:21-jre-alpine`)
+- [ ] **Cache Maven dependencies** — copy `pom.xml` and run `mvn dependency:go-offline` *before* copying `src/`
+- [ ] Copy **only the built jar** into the runtime stage (no source, no Maven)
+- [ ] **Run as a non-root user**
+- [ ] Add a **`HEALTHCHECK`** that probes `/actuator/health` (the alpine base has busybox `wget`)
+- [ ] `EXPOSE 8080` and set `ENTRYPOINT`/`CMD` to launch the jar
+- [ ] **Bonus:** use Spring Boot *layered jars* (`java -Djarmode=layertools ... extract`) so dependency layers stay cached when only code changes
+
+**Check yourself:**
+
+```bash
+docker build -t quotes-service .
+docker run --rm -p 8080:8080 quotes-service
+docker images quotes-service     # goal: ~200 MB, vs ~1 GB for a naive JDK image
+```
+
+## 📚 Stuck? Read the docs
+
+- [Dockerfile reference](https://docs.docker.com/reference/dockerfile/)
+- [Multi-stage builds](https://docs.docker.com/build/building/multi-stage/)
+- [Spring Boot — Docker / dockerfiles guide](https://docs.spring.io/spring-boot/reference/packaging/container-images/dockerfiles.html)
+- [Spring Boot — efficient container images & layered jars](https://docs.spring.io/spring-boot/reference/packaging/container-images/efficient-images.html)
+- [Eclipse Temurin images (build/run bases)](https://hub.docker.com/_/eclipse-temurin)
+- [`HEALTHCHECK` instruction](https://docs.docker.com/reference/dockerfile/#healthcheck)
+
+## 🎁 What you'll get from this project
+
+- The single most impressive image-size win in the suite: a **70–80% smaller**
+  Java image (~1 GB → ~200 MB) by keeping the compiler out of the runtime stage.
+- A clear grasp of **build-time vs run-time dependencies** (JDK+Maven vs JRE).
+- **Maven dependency caching** in Docker — copy `pom.xml` and go offline before
+  the source.
+- **Layered jars**: why a code change shouldn't bust your slow dependency layer.
+- Your strongest interview / LinkedIn talking point on container optimization.
+
+## API reference
+
+| Method | Path                 | Description    |
+|--------|----------------------|----------------|
+| GET    | `/actuator/health`   | Health probe   |
+| GET    | `/api/quotes`        | All quotes     |
+| GET    | `/api/quotes/random` | A random quote |
+| GET    | `/api/quotes/{id}`   | One by id      |
