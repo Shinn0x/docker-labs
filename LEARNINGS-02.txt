@@ -1,0 +1,90 @@
+==============================================================
+ What I learned — 02 · Quotes Service (Java / Spring Boot Dockerfile)
+==============================================================
+
+1. Building Java / framework images
+-----------------------------------
+I learned that a Java app gets compiled to bytecode first and then runs
+on the JVM:  .java --(javac)--> .class --(java)--> running program.
+A framework like Spring Boot isn't anything magic to me anymore — it's
+just a bunch of Maven dependencies plus a plugin on top of plain Java,
+so the build pipeline is the same.
+
+I now get the Maven phases (each one runs the ones before it):
+  compile -> .java to .class
+  test    -> run unit tests
+  package -> bundle into target/*.jar   (the one I used most)
+  clean   -> wipe target/  (so I usually ran: mvn clean package)
+Everything ends up in target/, and for Spring Boot the
+spring-boot-maven-plugin makes a "fat jar" with the app + all deps + an
+embedded Tomcat inside it, which surprised me — the server ships in the jar.
+
+
+2. JDK vs JVM vs JRE vs Maven
+-----------------------------
+This was the part that finally clicked for me:
+  JDK = javac (compiler) + jar + the JRE  -> I need this to BUILD
+  JRE = just the JVM + libs               -> I only need this to RUN
+  JVM = the engine that runs the bytecode
+  Maven = build tool + dependency manager; it reads pom.xml, pulls deps
+          into ~/.m2, and drives javac. It's useless on its own without
+          a JDK.
+That's exactly why my multi-stage build uses:
+  build stage -> maven:3.9-eclipse-temurin-21  (JDK + Maven)
+  run stage   -> eclipse-temurin:21-jre-alpine  (JRE only)
+I keep the compiler and Maven out of the final image on purpose.
+Also learned every library is identified by groupId:artifactId:version.
+
+
+3. Running Spring Boot (and a mistake I made)
+---------------------------------------------
+I learned there are two ways to run it:
+  mvn spring-boot:run            -> dev mode, but it BLOCKS forever
+  mvn clean package -DskipTests  -> then java -jar app.jar
+My mistake: I first put `mvn spring-boot:run` in a RUN step and the
+docker build just hung, because that command never exits. Lesson learned —
+in the Dockerfile I package with mvn and run with java -jar in ENTRYPOINT.
+
+
+4. Healthcheck with wget (and how it differs from Node.js)
+----------------------------------------------------------
+Spring Boot Actuator gives me /actuator/health -> {"status":"UP"}.
+Alpine only has busybox wget (no curl), so I probe with:
+  HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD wget --quiet --tries=1 --spider \
+        http://localhost:8080/actuator/health || exit 1
+What each bit taught me:
+  --quiet    I only care about pass/fail, not output
+  --tries=1  don't let wget retry — Docker already does via --retries
+  --spider   just check the URL responds, don't download the body
+  || exit 1  force exit 1 so Docker marks it unhealthy (0=healthy, 1=unhealthy)
+  --start-period=40s gives the JVM time to boot before failures count.
+Compared to Node.js: with Node I'd usually have curl around or write a
+small node healthcheck.js, and startup is fast. Here the JVM boots slowly
+so the start-period matters more, and I lean on Actuator's built-in
+health endpoint instead of writing my own route.
+
+
+5. Single-stage vs multi-stage — the difference is huge
+-------------------------------------------------------
+Seeing the numbers myself made it real:
+
+  IMAGE             ID              DISK USAGE   CONTENT SIZE
+  myquote:multi     cb1b99089e7a    331 MB       94.3 MB
+  myquote:single    412b474f1670    1.01 GB      338 MB
+
+The single-stage one drags the whole build toolchain (compiler, Maven,
+source, the ~/.m2 cache) into the final image. Multi-stage copies only
+the jar, so it ends up ~70% smaller. I saved the content-size comparison
+screenshot as size-diff.png.
+
+
+My takeaway for the next Java project
+-------------------------------------
+The framework name doesn't scare me now. I just check:
+  1. Build tool? (pom.xml = Maven, build.gradle = Gradle)
+  2. Java version? (match the JDK)
+  3. Build with mvn clean package, look in target/
+  4. Run with java -jar <the jar>
+  5. Find the entry point (main / @SpringBootApplication)
+Build on a JDK+Maven image, run on a JRE image. That's the whole trick.
